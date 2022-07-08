@@ -63,7 +63,11 @@ def run(args, logger):
             model = torch.nn.DataParallel(model)
 
         if torch.cuda.is_available():
+            print ("gpu trc load model")
+            print(torch.cuda.memory_allocated()/1024**2)
             model.to(torch.device("cuda"))
+            print ("gpu sau load model")
+            print(torch.cuda.memory_allocated()/1024**2)
 
         no_decay = ['bias', 'LayerNorm.weight']
         if args.unfreeze_hyper_encoder:
@@ -131,12 +135,13 @@ def train(args, logger, model, train_data, dev_data, optimizer, scheduler):
     model.model.backup_layer_norm_parameters()
 
     for epoch in range(int(args.num_train_epochs)):
-        for batch in tqdm(train_data.dataloader, desc="Epoch {}".format(epoch)):
+        for batchh in tqdm(train_data.dataloader, desc="Epoch {}".format(epoch)):
+        # for batch in train_data.dataloader:  #################https://discuss.pytorch.org/t/batches-not-cleared-from-memory/95543
             global_step += 1
             model.train()##############################################################
 
             if torch.cuda.is_available():
-                batch = [b.to(torch.device("cuda")) for b in batch[0]]
+                batch = [b for b in batchh[0]]
 
             rel_ids, rel_masks = batch[0].unsqueeze(0), batch[1].unsqueeze(0)
             input_ids, input_masks = batch[2], batch[3]
@@ -155,6 +160,16 @@ def train(args, logger, model, train_data, dev_data, optimizer, scheduler):
                                     output_masks=output_masks,
                                     is_training=True)
             else:
+                print ("gpu trc load data")
+                print(torch.cuda.memory_allocated()/1024**2)
+                rel_ids=rel_ids.to(torch.device("cuda"))
+                rel_masks=rel_masks.to(torch.device("cuda"))
+                input_ids=input_ids.to(torch.device("cuda"))
+                input_masks=input_masks.to(torch.device("cuda"))
+                output_ids=output_ids.to(torch.device("cuda"))
+                output_masks=output_masks.to(torch.device("cuda"))
+                print ("gpu sau load data")
+                print(torch.cuda.memory_allocated()/1024**2)
                 dumble = torch.ones(1, dtype=torch.float32, requires_grad=True)###############################
                 loss = torch.utils.checkpoint.checkpoint( model.forward,rel_ids,
                                     rel_masks,
@@ -163,33 +178,49 @@ def train(args, logger, model, train_data, dev_data, optimizer, scheduler):
                                     output_ids,
                                     output_masks,
                                     True, dumble)     ############################################### dumble
-            # rel_ids.to(torch.device("cpu"))##################
-            # rel_masks.to(torch.device("cpu"))
-            # input_ids.to(torch.device("cpu"))
-            # input_masks.to(torch.device("cpu"))
-            # output_ids.to(torch.device("cpu"))
-            # output_masks.to(torch.device("cpu"))
-            del batch,rel_ids,rel_masks,input_ids,input_masks,output_ids,output_masks    ##############################
+                print ("gpu sau train data")
+                print(torch.cuda.memory_allocated()/1024**2)
+            # rel_ids=rel_ids.cpu()##################
+            # rel_masks=rel_masks.cpu()
+            # input_ids=input_ids.cpu()
+            # input_masks=input_masks.cpu()
+            # output_ids=output_ids.cpu()
+            # output_masks=output_masks.cpu()
+            print ("gpu sau chay cpu data")
+            print(torch.cuda.memory_allocated()/1024**2)
+            # del batch,rel_ids,rel_masks,input_ids,input_masks,output_ids,output_masks    ##############################
             torch.cuda.empty_cache()
             import gc
             gc.collect()
             # train_losses.append(loss.detach().cpu()) ############################## https://stackoverflow.com/questions/54316020/cuda-out-of-memory-when-fine-tuning-a-large-model
-            train_losses.append(loss.item()) 
-            loss.backward()
+            loss.backward() ######################################## cuda oom 
+            print ("gpu sau goi backward")
+            print(torch.cuda.memory_allocated()/1024**2)
+            train_losses.append(loss.detach().cpu().item()) 
+            loss=loss.cpu()
+            rel_ids=rel_ids.cpu()##################
+            rel_masks=rel_masks.cpu()
+            input_ids=input_ids.cpu()
+            input_masks=input_masks.cpu()
+            output_ids=output_ids.cpu()
+            output_masks=output_masks.cpu()
             del loss
+            del batch,rel_ids,rel_masks,input_ids,input_masks,output_ids,output_masks    ##############################
             torch.cuda.empty_cache()
             gc.collect()
+            # time.sleep(.) https://discuss.pytorch.org/t/cuda-memory-not-being-freed/15965/6
+            print ("gpu sau xoa data")
+            print(torch.cuda.memory_allocated()/1024**2)
 
-            
-
-            model.model.restore_layer_norm_parameters()
+            model.model.restore_layer_norm_parameters() ####################################https://github.com/skorch-dev/skorch/issues/741
 
             if global_step % args.gradient_accumulation_steps == 0:
                 # for p in model.meta_model.decoders.parameters():
                     # print(p)
                     # print(p.grad)
                     # break
-                
+                print ("gpu bat dau zero grad")
+                print(torch.cuda.memory_allocated()/1024**2)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                 
                 # for p in model.meta_model.decoders.parameters():
@@ -202,35 +233,41 @@ def train(args, logger, model, train_data, dev_data, optimizer, scheduler):
                 scheduler.step()
                 model.eval() ##########################################3https://clay-atlas.com/us/blog/2021/07/31/pytorch-en-runtimeerror-cuda-out-of-memory/
                 model.zero_grad(set_to_none=True) ########################################### model.zero_grad()  https://discuss.pytorch.org/t/runtimeerror-cuda-oom-after-training-on-a-few-batches/125813
-     
-                # torch.cuda.empty_cache()
-                # import gc
-                # gc.collect()
-                # ########################################################## reload model
-                # model.to(torch.device("cpu"))
-                # # # from copy import deepcopy
-                # # # model = deepcopy(model)
-                # # tmp_model=model
-                # # del model
-                # torch.cuda.empty_cache()
-                # gc.collect()
-                # # # model=tmp_model
-                # # f=1
-                # # while(f>0):
-                # #   print("claer")
-                # #   torch.cuda.empty_cache()
-                # #   t = torch.cuda.get_device_properties(0).total_memory
-                # #   r = torch.cuda.memory_reserved(0)
-                # #   a = torch.cuda.memory_allocated(0)
-                # #   f = r-a  # free inside reserved
 
-                # model.to(torch.device("cuda"))
+                print(7)
+                # torch.cuda.empty_cache() ##############
+                import gc
+                gc.collect()
+                ########################################################## reload model
+                # model.to(torch.device("cpu")) #####
+                # # from copy import deepcopy
+                # # model = deepcopy(model)
+                # tmp_model=model
+                # del model
+                # torch.cuda.empty_cache() ##############
+                gc.collect()
+                # # model=tmp_model
+                # f=1
+                # while(f>0):
+                #   print("claer")
+                #   torch.cuda.empty_cache()
+                #   t = torch.cuda.get_device_properties(0).total_memory
+                #   r = torch.cuda.memory_reserved(0)
+                #   a = torch.cuda.memory_allocated(0)
+                #   f = r-a  # free inside reserved
+
+                # model.to(torch.device("cuda")) #####
 
                 # print(model.meta_model.decoders[-1].linear1.weight)
-
-            if global_step % 2==0####################################args.eval_period == 0:
+                print ("gpu sau zero grad")
+                print(torch.cuda.memory_allocated()/1024**2)
+            if global_step % 2==0: #2###########################args.eval_period == 0:
+                print ("gpu truoc model eval")
+                print(torch.cuda.memory_allocated()/1024**2)
                 model.eval()
                 # curr_em = 0.0
+                print ("gpu sau model eval")
+                print(torch.cuda.memory_allocated()/1024**2)
                 curr_em = inference(model if args.n_gpu==1 else model.module, dev_data, save_predictions=True)
                 logger.info("Step %d Train loss %.2f %s %s on epoch=%d" % (
                         global_step,
@@ -239,6 +276,8 @@ def train(args, logger, model, train_data, dev_data, optimizer, scheduler):
                         curr_em,
                         epoch))
                 train_losses = []
+                print ("gpu sau infer ")
+                print(torch.cuda.memory_allocated()/1024**2)
                 if best_accuracy < curr_em:
                     model_state_dict = {k:v.cpu() for (k, v) in model.state_dict().items()}
                     torch.save(model_state_dict, os.path.join(args.output_dir, "best-model.pt"))
@@ -253,7 +292,8 @@ def train(args, logger, model, train_data, dev_data, optimizer, scheduler):
                         stop_training = True
                         break
                 model.train()
-
+                print ("ket thuc iter ration")
+                print(torch.cuda.memory_allocated()/1024**2)
         if stop_training:
             break
 
@@ -277,12 +317,12 @@ def inference(model, dev_data, save_predictions=False, verbose=False):
         with torch.no_grad():
             model.set_relation(batch[0], batch[1])
 
-    #         outputs = model.model.generate(input_ids=batch[2],
+    #         outputs = model.model.model.generate(input_ids=batch[2],
     #                                 attention_mask=batch[3],
     #                                 num_beams=dev_data.args.num_beams,
     #                                 max_length=dev_data.args.max_output_length,
     #                                 decoder_start_token_id=model.config.bos_token_id,
-    #                                 early_stopping=dev_data.gen_early_stop,) ############### cố sửa generate thì ok  đc 2 example file train 
+    #                                 early_stopping=dev_data.gen_early_stop,) #################
     #     for input_, output in zip(batch[2], outputs):
     #         pred = dev_data.decode(output)
     #         predictions.append(pred)
