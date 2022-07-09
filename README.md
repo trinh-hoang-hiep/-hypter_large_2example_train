@@ -1,5 +1,3 @@
-
-2 example 
 ## Code for "Zero-shot Learning by Generating Task-specific Adapters"
 
 This is the repository containing code for "Zero-shot Learning by Generating Task-specific Adapters" ([arXiv](https://arxiv.org/abs/2101.00420)). This is a beta version and we will add more details in the future.

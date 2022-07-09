@@ -277,7 +277,7 @@ class BartModelWithAdapter(BartModel): ############################ BartModel m�
     #     dummy_tensor=None ####################################### thêm dummy_tensor c1 sửa tận lib, c2 sửa trong tk kế thừa BartModel
     # ):
     #     return self.forward(self, input_ids=input_ids, attention_mask=attention_mask, decoder_input_ids=_decoder_input_ids, encoder_outputs=encoder_outputs, decoder_attention_mask=decoder_attention_mask, decoder_cached_states=decoder_cached_states, use_cache=use_cache, output_attentions=None, output_hidden_states=None)
-##################################################### thêm class để giữ lại thứ tự param của  pytorch-transformers
+#####################################################
 class Newmodel(nn.Module):
 
     def __init__(self,model):
@@ -285,7 +285,7 @@ class Newmodel(nn.Module):
         self.modell=model ##########################torch.utils.checkpoint.checkpoint(
     def forward(self, input_ids,attention_mask=None,_decoder_input_ids=None,encoder_outputs=None,decoder_attention_mask=None,decoder_cached_states=None, use_cache=None,dummy_tensor=None ):
         dummy_ten = torch.ones(1, dtype=torch.float32, requires_grad=True)############################################
-        return torch.utils.checkpoint.checkpoint(self.modell,input_ids,attention_mask,_decoder_input_ids,encoder_outputs,decoder_attention_mask,decoder_cached_states,use_cache,dummy_ten)#,None,None,dummy_ten)
+        return torch.utils.checkpoint.checkpoint(self.modell,input_ids,attention_mask,_decoder_input_ids,encoder_outputs,decoder_attention_mask,decoder_cached_states,use_cache,dummy_ten)
         # return self.modell(input_ids,attention_mask=attention_mask,encoder_outputs=encoder_outputs,decoder_input_ids=_decoder_input_ids,decoder_attention_mask=decoder_attention_mask,decoder_cached_states=decoder_cached_states,use_cache=use_cache)
 class BartForConditionalGenerationWithAdapter(BartForConditionalGeneration):
     def __init__(self, config: BartConfig):
@@ -294,8 +294,7 @@ class BartForConditionalGenerationWithAdapter(BartForConditionalGeneration):
         # self.model = base_model
         self.model = Newmodel(base_model)##########################################
         print(self.model.forward.__code__.co_varnames)############################################
-        self.register_buffer("final_logits_bias", torch.zeros((1, self.model.modell.shared.num_embeddings)))################################################self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
-
+        self.register_buffer("final_logits_bias", torch.zeros((1, self.model.modell.shared.num_embeddings)))#############thêm modell
 CHECKPOINT = True ############################################ https://discuss.pytorch.org/t/trying-to-understand-torch-utils-checkpoint/95224
 from torch.utils.checkpoint import checkpoint ###################https://discuss.pytorch.org/t/attributeerror-module-torch-utils-has-no-attribute-checkpoint/101543/6
 class MyBartWithAdapter(BartForConditionalGenerationWithAdapter):
@@ -364,7 +363,7 @@ class MyBartWithAdapter(BartForConditionalGenerationWithAdapter):
             outputs = torch.utils.checkpoint.checkpoint(self.model, ##################################################
                 input_ids,attention_mask,_decoder_input_ids,encoder_outputs,decoder_attention_mask,decoder_cached_states, use_cache,dummy_tensor
             )
-            lm_logits = torch.utils.checkpoint.checkpoint(F.linear,outputs[0], self.model.modell.shared.weight.requires_grad_(), self.final_logits_bias) #####################    modell       
+            lm_logits = torch.utils.checkpoint.checkpoint(F.linear,outputs[0], self.model.modell.shared.weight.requires_grad_(), self.final_logits_bias) #####################     modell      
         if is_training:
             # loss_fct = nn.CrossEntropyLoss(reduction="mean", ignore_index=self.config.pad_token_id)
             # loss = loss_fct(lm_logits.view(-1, self.config.vocab_size),
@@ -375,10 +374,10 @@ class MyBartWithAdapter(BartForConditionalGenerationWithAdapter):
         return (lm_logits, ) + outputs[1:]
     
     def encoders(self):
-        return self.model.modell.encoder.layers ############################### modell
+        return self.model.modell.encoder.layers
 
     def decoders(self):
-        return self.model.modell.decoder.layers ############################# modell
+        return self.model.modell.decoder.layers
 
     def backup_layer_norm_parameters(self):
         for encoder in self.encoders():

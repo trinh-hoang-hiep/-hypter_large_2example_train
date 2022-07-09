@@ -136,7 +136,8 @@ class GrowingBart(nn.Module):
                         is_training=is_training
             )
         else:
-            print(self.model.forward.__code__.co_varnames)
+            print("tham so /n")
+            print(self.model.forward.__code__.co_varnames) ############################### dumbledore
             # input_ids.requires_grad_()###################https://discuss.pytorch.org/t/checkpoint-with-no-grad-requiring-inputs-problem/19117/10
             dumbledore = torch.ones(1, dtype=torch.float32, requires_grad=True)###############################
             ret = torch.utils.checkpoint.checkpoint(self.model,input_ids, input_masks,None ,

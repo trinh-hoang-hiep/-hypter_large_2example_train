@@ -35,7 +35,7 @@ def freeze_embeds(model):
         for d in [model.encoder, model.decoder]:
             freeze_params(d.embed_tokens)
     elif model_type == "fsmt":
-        for d in [model.model.modell.encoder, model.model.modell.decoder]:####################modell
+        for d in [model.model.modell.encoder, model.model.modell.decoder]:
             freeze_params(d.embed_positions)
             freeze_params(d.embed_tokens)
     else:
@@ -54,4 +54,5 @@ def trim_batch(
     if attention_mask is None:
         return input_ids[:, keep_column_mask]
     else:
-        return (input_ids[:, keep_column_mask], attention_mask[:, keep_column_mask])
+        # return (input_ids[:, keep_column_mask], attention_mask[:, keep_column_mask]) 
+        return input_ids[:, keep_column_mask], attention_mask[:, keep_column_mask] ##############################################################
